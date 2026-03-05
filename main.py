@@ -1,10 +1,10 @@
-# main.py
 import sys
 from pathlib import Path
 from PIL import Image
 
 from pipeline.analyze import Analyzer
-from config import EFFNET_WEIGHTS, CLASS_NAMES
+from config import VIT_WEIGHTS, CLASS_NAMES
+
 
 def main():
     if len(sys.argv) < 2:
@@ -16,20 +16,38 @@ def main():
         print(f"Image not found: {img_path}")
         sys.exit(1)
 
-    analyzer = Analyzer(EFFNET_WEIGHTS, CLASS_NAMES)
+    analyzer = Analyzer(VIT_WEIGHTS, CLASS_NAMES)
 
-    img = Image.open(img_path).convert("RGB")
-    result = analyzer.analyze_image(img)
+    # FIX: args.image ei eksisteeri → kasutame img_path
+    result = analyzer.analyze_image(str(img_path))
 
     print("\n=== ANALYSIS RESULT ===")
-    for item in result["items"]:
-        print(f"- {item['name']}")
-        print(f"  grams: {item['grams']:.1f}")
-        print(f"  calories: {item['calories']:.1f}")
-        print(f"  confidence: {item['cls_conf']:.2f}")
+
+    # FIX: Analyzer tagastab listi, mitte dicti
+    total_calories = 0.0
+
+    for item in result:
+        name = item["name"]
+        grams = item["grams"]
+        conf = item["confidence"]
+
+        # kalorid puuduvad sinu pipeline'is → paneme None
+        calories = None
+
+        print(f"- {name}")
+        print(f"  grams: {grams:.1f}")
+        if calories is None:
+            print("  calories: unknown")
+        else:
+            print(f"  calories: {calories:.1f}")
+        print(f"  confidence: {conf:.2f}")
         print()
 
-    print(f"TOTAL CALORIES: {result['total_calories']:.1f}")
+        if calories is not None:
+            total_calories += calories
+
+    print(f"TOTAL CALORIES: {total_calories:.1f}")
+
 
 if __name__ == "__main__":
     main()

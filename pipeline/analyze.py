@@ -1,42 +1,43 @@
 # pipeline/analyze.py
-from typing import Dict, Any, List
-from PIL import Image
-
-from models.detector import FoodDetector
 from models.classifier import FoodClassifier
 from models.depth import DepthEstimator
-from pipeline.portion import estimate_volume_cm3, volume_to_grams
-from pipeline.calories import NutritionDB
+from models.detector import FoodDetector
 
 class Analyzer:
     def __init__(self, clf_weights, class_names):
-        self.detector = FoodDetector()
         self.classifier = FoodClassifier(clf_weights, class_names)
+        self.detector = FoodDetector()
         self.depth_estimator = DepthEstimator()
-        self.nutrition = NutritionDB()
 
-    def analyze_image(self, img: Image.Image) -> Dict[str, Any]:
-        detections = self.detector.detect(img)
-        depth = self.depth_estimator.infer(img)
+        # --- FIX: depth estimator fallback ---
+        if not hasattr(self.depth_estimator, "estimate"):
+            # Try to map to another likely method name
+            if hasattr(self.depth_estimator, "predict"):
+                self.depth_estimator.estimate = self.depth_estimator.predict
+            elif hasattr(self.depth_estimator, "estimate_depth"):
+                self.depth_estimator.estimate = self.depth_estimator.estimate_depth
+            else:
+                raise AttributeError("DepthEstimator: puudub meetod 'estimate'")
 
-        items: List[Dict[str, Any]] = []
+    def analyze(self, image_path):
+        detections = self.detector.detect(image_path)
+        depth_map = self.depth_estimator.estimate(image_path)
+
+        results = []
         for det in detections:
+            crop = det["crop"]
             bbox = det["bbox"]
-            crop = img.crop(bbox)
-            name, cls_conf = self.classifier.classify(crop)
 
-            volume = estimate_volume_cm3(bbox, depth)
-            grams = volume_to_grams(name, volume)
-            calories = self.nutrition.grams_to_calories(name, grams)
+            name, conf = self.classifier.classify(crop)
+            grams = self.depth_estimator.estimate_grams(bbox, depth_map)
 
-            items.append({
+            results.append({
                 "name": name,
-                "bbox": bbox,
-                "cls_conf": cls_conf,
-                "volume_cm3": volume,
-                "grams": grams,
-                "calories": calories,
+                "confidence": conf,
+                "grams": grams
             })
 
-        total_calories = sum(i["calories"] for i in items if i["calories"] is not None)
-        return {"items": items, "total_calories": total_calories}
+        return results
+
+    def analyze_image(self, image_path):
+        return self.analyze(image_path)

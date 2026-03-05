@@ -1,23 +1,30 @@
 # models/detector.py
 from ultralytics import YOLO
 from PIL import Image
-from typing import List, Dict
-from config import YOLO_WEIGHTS
+import numpy as np
 
 class FoodDetector:
-    def __init__(self):
-        self.model = YOLO(str(YOLO_WEIGHTS))
+    def __init__(self, model_path="yolov8n.pt"):
+        self.model = YOLO(model_path)
 
-    def detect(self, img: Image.Image) -> List[Dict]:
-        results = self.model.predict(img, verbose=False)[0]
-        items = []
+    def detect(self, image_path):
+        img = Image.open(image_path).convert("RGB")
+        img_np = np.array(img)
+
+        results = self.model(image_path)[0]
+
+        detections = []
         for box in results.boxes:
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            items.append({
-                "bbox": [x1, y1, x2, y2],
-                "conf": conf,
-                "cls_id": cls_id,
+
+            # lõikame pildi välja
+            crop = img.crop((x1, y1, x2, y2))
+
+            detections.append({
+                "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                "crop": crop,
+                "confidence": conf
             })
-        return items
+
+        return detections

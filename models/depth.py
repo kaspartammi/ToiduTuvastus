@@ -19,3 +19,21 @@ class DepthEstimator:
             depth = pred.squeeze().cpu().numpy()
         depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
         return depth
+
+    # --- FIX: Analyzer expects this method ---
+    def estimate(self, image_path: str) -> np.ndarray:
+        img = Image.open(image_path).convert("RGB")
+        return self.infer(img)
+
+    # --- FIX: Analyzer expects this method too ---
+    def estimate_grams(self, bbox, depth_map) -> float:
+        # bbox = [x1, y1, x2, y2]
+        x1, y1, x2, y2 = bbox
+        crop = depth_map[y1:y2, x1:x2]
+
+        if crop.size == 0:
+            return 0.0
+
+        avg_depth = float(np.mean(crop))
+        grams = max(10.0, avg_depth * 300.0)  # simple placeholder formula
+        return grams
