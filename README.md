@@ -1,184 +1,144 @@
-YOLOv8n (COCO) + Vision Transformer (ViT)
+# ToiduTuvastus — Food Recognition & Calorie Estimator
+
+A computer vision pipeline that detects food items in photos, classifies them, and estimates calories. Built as a learning project with a fully local inference stack — no cloud APIs required.
+
+---
+
+## How It Works
+
+```
+Input Image
+    │
+    ▼
+SAM (Segment Anything Model)
+    │  Finds all distinct regions in the image
+    │  Filters out background, plates, cutlery
+    ▼
+Food Classifier (prithivMLmods/Food-101-93M)
+    │  Classifies each crop into one of 101 food categories
+    │  Low-confidence detections are skipped
+    ▼
+MiDaS Depth Estimator
+    │  Estimates relative portion size using depth map
+    │  Scaled against standard portion sizes per food type
+    ▼
+Nutrition Lookup
+    │  Maps food label → kcal/100g
+    ▼
+Output: food name, estimated grams, estimated calories
+```
+
+---
+
+## Stack
+
+| Component | Model | Purpose |
+|-----------|-------|---------|
+| Detection | [SAM vit_b](https://github.com/facebookresearch/segment-anything) | Segment food regions — no food-specific training needed |
+| Classification | [prithivMLmods/Food-101-93M](https://huggingface.co/prithivMLmods/Food-101-93M) | 101-class food classifier (SigLIP2 backbone) |
+| Depth | [MiDaS DPT_Large](https://github.com/isl-org/MiDaS) | Relative portion size estimation |
 
-This project is an early‑stage food recognition system designed to detect food items in images and classify them into specific food categories. The current version uses YOLOv8n.pt (trained on COCO) for object detection and a Vision Transformer (ViT) for classification.
+---
 
-Because COCO is not a food‑specific dataset, detection accuracy is limited — but the pipeline is fully functional and ready for future upgrades.
+## Project Structure
 
-📌 Current Status (Realistic)
-✔️ Implemented
+```
+ToiduTuvastus/
+├── models/
+│   ├── detector.py        # SAM-based food region segmentation
+│   ├── classifier.py      # Food-101 ViT classifier wrapper
+│   ├── depth.py           # MiDaS depth estimator + grams estimation
+│   └── nutrition.py       # Calorie & standard portion database (101 foods)
+├── pipeline/
+│   └── analyze.py         # Full inference pipeline with dedup & filtering
+├── data/
+│   └── labels.txt
+├── weights/
+│   └── sam_vit_b_01ec64.pth   # SAM weights (download separately)
+├── main.py
+├── config.py
+└── requirements.txt
+```
 
-    YOLOv8n detector (COCO)
+---
 
-    ViT classifier for food categories
+## Setup
 
-    Image cropping based on YOLO detections
+### 1. Install dependencies
 
-    Basic inference pipeline
+```bash
+pip install ultralytics torch torchvision pillow opencv-python numpy
+pip install transformers segment-anything
+```
 
-    Grams estimation (experimental)
+### 2. Download SAM weights
 
-    Calorie estimation (placeholder)
+```bash
+# ~375 MB — place in project root or update SAM_CHECKPOINT in models/detector.py
+wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+```
 
-❗ Limitations (Current Version)
+Classifier and depth model weights are downloaded automatically from HuggingFace/PyTorch Hub on first run.
 
-    YOLOv8n detects forks, tables, pizza, bowls, etc.
+### 3. Run
 
-    Bounding boxes are often inaccurate
+```bash
+python main.py path/to/food_image.jpg
+```
 
-    Some foods are misclassified due to poor crops
+---
 
-    No food‑specific detection model yet
+## Example Output
 
-    No custom training yet
+```
+=== ANALYSIS RESULT ===
+- omelette
+  grams:      200.0g  (estimated)
+  calories:   310.0 kcal
+  confidence: 0.98
 
-🎯 Next Major Upgrade (Planned)
+- steak
+  grams:      220.0g  (estimated)
+  calories:   550.0 kcal
+  confidence: 0.91
 
-    Train YOLOv8‑L on UEC‑Food256 for 256 food classes
+TOTAL CALORIES: 860.0 kcal  (estimated)
+```
 
-    Replace COCO detector with a food‑specific model
+---
 
-    Improve grams + calorie estimation
+## Accuracy & Limitations
 
-    Project Architecture
-    Input Image
-     │
-     ▼
-YOLOv8n (COCO) Detector → Bounding Boxes (not food‑specific)
-     │
-     ▼
-Crop Each Detected Region
-     │
-     ▼
-ViT Classifier → Food Label
-     │
-     ▼
-(Optional) Nutrition Lookup → Calories, Macros
+### What works well
+- Common restaurant-style dishes (omelette, steak, pizza, sushi, ramen, fried chicken)
+- Multi-food images — SAM segments individual items cleanly
+- Background/plate suppression — white plates, dark countertops, cutlery are filtered out
+- Duplicate detection suppression via IoU + center-distance deduplication
 
-Repository Structure
-project/
- ├── weights/
- │    ├── yolov8n.pt              # current detector (COCO)
- │    └── vit_classifier.pt       # classifier
- ├── src/
- │    ├── detector.py             # YOLO wrapper
- │    ├── classifier.py           # ViT wrapper
- │    ├── pipeline.py             # full inference pipeline
- │    └── utils.py
- ├── data/
- │    └── labels.txt              # classifier labels
- ├── notebooks/
- │    └── future_train_uec256.ipynb  # placeholder for future training
- ├── README.md
- └── requirements.txt
+### Known limitations
 
- How to Run Inference
- pip install ultralytics torch torchvision pillow opencv-python numpy
+| Issue | Cause | Status |
+|-------|-------|--------|
+| Home-cooked foods misclassified | Food-101 is restaurant/US-cuisine biased — no mashed potato, plov, porridge etc. | Known limitation |
+| Portion estimates are rough | Single-image depth estimation without a reference object | Estimated ±40% accuracy |
+| Mixed dishes lose secondary ingredients | SAM can't isolate meat chunks inside rice/soup | Partially mitigated via lower confidence threshold for mixed-dish labels |
+| Drinks classified as food | Tea/coffee sometimes detected as miso soup or broth | Low impact on calorie total |
 
- from src.pipeline import FoodPipeline
+### Why SAM instead of YOLO?
 
-pipeline = FoodPipeline(
-    detector_path="weights/yolov8n.pt",
-    classifier_path="weights/vit_classifier.pt"
-)
+The original version used YOLOv8n trained on COCO, which detected non-food objects (forks, tables, bowls) and had inaccurate bounding boxes for food items. SAM replaced it because it requires no food-specific training — it finds all distinct regions in any image, and the food classifier handles the food/non-food distinction downstream.
 
-results = pipeline("example.jpg")
-print(results)
+---
 
-Output example
-[
-  {
-    "label": "steak",
-    "confidence": 0.82,
-    "grams": 210.3,
-    "calories": 540
-  },
-  {
-    "label": "asparagus",
-    "confidence": 0.77,
-    "grams": 45.7,
-    "calories": 20
-  }
-]
+## Roadmap
 
+- [ ] Fine-tune classifier on a broader food dataset (UEC-Food256 or OpenFoodFacts images)
+- [ ] Improve portion estimation with reference object detection (coin, hand, plate diameter)
+- [ ] Add food diary / history tracking
+- [ ] Mobile-friendly interface
 
-Known Issues
+---
 
-    YOLOv8n detects non‑food objects (forks, tables, bowls)
-
-    Bounding boxes may cut off food items
-
-    Misclassifications occur due to poor crops
-
-    Calorie estimation is experimental
-
-These issues will be resolved once the project switches to a food‑specific YOLO model.
-
-Roadmap
-Phase 1 — Current (Done)
-
-    Basic pipeline with YOLOv8n + ViT
-
-    Working inference
-
-    Basic grams estimation
-
-Phase 2 — Next (In Progress)
-
-    Train YOLOv8‑L on UEC‑Food256
-
-    Replace COCO detector
-
-    Improve bounding box quality
-
-    Improve classifier accuracy
-
-Phase 3 — Future
-
-    Nutrition database integration
-
-    Portion size estimation
-
-    Multi‑food calorie estimation
-
-    Mobile app version
-
-    Why Upgrade to UEC‑Food256?
-
-COCO has 0 real food classes except:
-
-    pizza
-
-    cake
-
-    hot dog
-
-    sandwich
-
-    bowl
-
-    fork
-
-    spoon
-
-UEC‑Food256 has 256 real food categories, including:
-
-    steak
-
-    asparagus
-
-    ramen
-
-    sushi
-
-    pasta
-
-    soups
-
-    desserts
-
-    vegetables
-
-This upgrade will dramatically improve detection accuracy.
-License
+## License
 
 MIT License.

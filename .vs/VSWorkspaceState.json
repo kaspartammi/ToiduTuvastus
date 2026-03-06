@@ -1,16 +1,6 @@
 {
   "ExpandedNodes": [
-    "",
-    "\\api",
-    "\\data",
-    "\\download",
-    "\\model",
-    "\\models",
-    "\\pipeline",
-    "\\weights",
-    "\\weightsyolo",
-    "\\yolov8s.pt"
+    ""
   ],
-  "SelectedNode": "\\main.py",
   "PreviewInSolutionExplorer": false
 }

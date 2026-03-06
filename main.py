@@ -1,10 +1,8 @@
+# main.py
 import sys
 from pathlib import Path
-from PIL import Image
-
 from pipeline.analyze import Analyzer
 from config import VIT_WEIGHTS, CLASS_NAMES
-
 
 def main():
     if len(sys.argv) < 2:
@@ -17,37 +15,30 @@ def main():
         sys.exit(1)
 
     analyzer = Analyzer(VIT_WEIGHTS, CLASS_NAMES)
-
-    # FIX: args.image ei eksisteeri → kasutame img_path
-    result = analyzer.analyze_image(str(img_path))
+    result   = analyzer.analyze_image(str(img_path))
 
     print("\n=== ANALYSIS RESULT ===")
+    if not result:
+        print("No food items detected with sufficient confidence.")
+        return
 
-    # FIX: Analyzer tagastab listi, mitte dicti
     total_calories = 0.0
-
     for item in result:
-        name = item["name"]
-        grams = item["grams"]
-        conf = item["confidence"]
-
-        # kalorid puuduvad sinu pipeline'is → paneme None
-        calories = None
+        name     = item["name"]
+        grams    = item["grams"]
+        conf     = item["confidence"]
+        calories = item.get("calories")
 
         print(f"- {name}")
-        print(f"  grams: {grams:.1f}")
-        if calories is None:
-            print("  calories: unknown")
-        else:
-            print(f"  calories: {calories:.1f}")
+        print(f"  grams:      {grams:.1f}g  (estimated)")
+        print(f"  calories:   {f'{calories:.1f} kcal' if calories is not None else 'unknown'}")
         print(f"  confidence: {conf:.2f}")
         print()
 
         if calories is not None:
             total_calories += calories
 
-    print(f"TOTAL CALORIES: {total_calories:.1f}")
-
+    print(f"TOTAL CALORIES: {total_calories:.1f} kcal  (estimated)")
 
 if __name__ == "__main__":
     main()
