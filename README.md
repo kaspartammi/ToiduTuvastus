@@ -32,7 +32,7 @@ source .venv/bin/activate
 ### 2. Install dependencies
 
 ```bash
-pip install flask torch torchvision pillow numpy transformers segment-anything difflib
+pip install flask torch torchvision pillow numpy transformers segment-anything opencv-python timm
 ```
 
 ### 3. Download the SAM checkpoint
